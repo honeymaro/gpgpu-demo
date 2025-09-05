@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPGPU パフォーマンス比較: 行列乗算</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;600;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 1200px;
+      width: 100%;
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 80px 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+      border: 1px solid #e2e8f0;
+      position: relative;
+    }
+
+    .github-link {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #24292e;
+      color: white;
+      text-decoration: none;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(36, 41, 46, 0.2);
+    }
+
+    .github-link:hover {
+      background: #1c2025;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(36, 41, 46, 0.3);
+    }
+
+    .github-icon {
+      width: 18px;
+      height: 18px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 1.1rem;
+      color: #64748b;
+      font-weight: 300;
+    }
+
+    .controls {
+      max-width: 400px;
+      margin: 0 auto 40px;
+    }
+
+    .form-group {
+      margin-bottom: 30px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.95rem;
+    }
+
+    .form-select {
+      width: 100%;
+      padding: 15px 20px;
+      background: #f9fafb;
+      border: 2px solid #d1d5db;
+      border-radius: 12px;
+      color: #1f2937;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      outline: none;
+    }
+
+    .form-select:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .buttons-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    .calc-button {
+      padding: 20px;
+      border: none;
+      border-radius: 16px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .calc-button::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.1);
+      transition: left 0.5s ease;
+    }
+
+    .calc-button:hover::before {
+      left: 100%;
+    }
+
+    .cpu-button {
+      background: #dc2626;
+      box-shadow: 0 8px 25px rgba(220, 38, 38, 0.2);
+    }
+
+    .cpu-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 35px rgba(220, 38, 38, 0.3);
+      background: #b91c1c;
+    }
+
+    .gpu-button {
+      background: #059669;
+      box-shadow: 0 8px 25px rgba(5, 150, 105, 0.2);
+    }
+
+    .gpu-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 35px rgba(5, 150, 105, 0.3);
+      background: #047857;
+    }
+
+    .calc-button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .status {
+      text-align: center;
+      margin: 30px 0;
+      min-height: 30px;
+      font-size: 1.1rem;
+      color: #64748b;
+    }
+
+    .loader {
+      border: 3px solid #e5e7eb;
+      border-top: 3px solid #3b82f6;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      margin-left: 10px;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .canvas-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin: 40px 0;
+    }
+
+    .canvas-section {
+      text-align: center;
+    }
+
+    .canvas-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 15px;
+      padding: 15px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+
+    .cpu-title {
+      color: #dc2626;
+    }
+
+    .gpu-title {
+      color: #059669;
+    }
+
+    canvas {
+      width: 100%;
+      max-width: 400px;
+      aspect-ratio: 1;
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin: 40px 0;
+    }
+
+    .result-card {
+      background: #f8fafc;
+      padding: 30px;
+      border-radius: 20px;
+      text-align: center;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    }
+
+    .result-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 15px;
+    }
+
+    .cpu-result-title {
+      color: #dc2626;
+    }
+
+    .gpu-result-title {
+      color: #059669;
+    }
+
+    .result-time {
+      font-size: 2.5rem;
+      font-family: 'Courier New', monospace;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .performance-diff {
+      text-align: center;
+      margin: 30px 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      min-height: 40px;
+      color: #3b82f6;
+    }
+
+    .performance-highlight {
+      color: #059669;
+      font-size: 2rem;
+    }
+
+    .error-log {
+      margin-top: 30px;
+      padding: 20px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      color: #dc2626;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      text-align: left;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .flex-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    @media (max-width: 768px) {
+      .title {
+        font-size: 2rem;
+      }
+
+      .canvas-grid,
+      .results-grid,
+      .buttons-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .container {
+        padding: 80px 20px;
+      }
+
+      .github-link {
+        top: 15px;
+        right: 15px;
+        padding: 10px 12px;
+        font-size: 0.8rem;
+      }
+
+      .github-icon {
+        width: 16px;
+        height: 16px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <a href="https://github.com/honeymaro/gpgpu-demo" target="_blank" class="github-link">
+      <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path
+          d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+      </svg>
+      GitHub
+    </a>
+    <div class="header">
+      <h1 class="title">GPGPU 行列乗算パフォーマンス比較</h1>
+      <p class="subtitle">WebGL2を用いたGPUとCPUの性能差</p>
+    </div>
+
+    <!-- 設定コントロール -->
+    <div class="controls">
+      <div class="form-group">
+        <label for="matrixSize" class="form-label">行列サイズ (N x N):</label>
+        <select id="matrixSize" class="form-select">
+          <option value="256">256x256</option>
+          <option value="512" selected>512x512</option>
+          <option value="1024">1024x1024</option>
+          <option value="2048">2048x2048 (注意: 時間がかかる場合があります)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 計算ボタン -->
+    <div class="buttons-grid">
+      <button id="cpuStartButton" class="calc-button cpu-button">
+        CPU計算
+      </button>
+      <button id="gpuStartButton" class="calc-button gpu-button">
+        GPU計算
+      </button>
+    </div>
+
+    <!-- ステータス表示 -->
+    <div id="status" class="status"></div>
+
+    <!-- 視覚化キャンバス -->
+    <div class="canvas-grid">
+      <div class="canvas-section">
+        <h2 class="canvas-title cpu-title">CPU演算過程（逐次処理）</h2>
+        <canvas id="cpu-canvas"></canvas>
+      </div>
+      <div class="canvas-section">
+        <h2 class="canvas-title gpu-title">GPU演算結果（並列処理）</h2>
+        <canvas id="gpu-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- 結果表示 -->
+    <div class="results-grid">
+      <div class="result-card">
+        <h2 class="result-title cpu-result-title">CPU</h2>
+        <p id="cpuTime" class="result-time">- ms</p>
+      </div>
+      <div class="result-card">
+        <h2 class="result-title gpu-result-title">GPU (WebGL2)</h2>
+        <p id="gpuTime" class="result-time">- ms</p>
+      </div>
+    </div>
+
+    <!-- パフォーマンス比較結果 -->
+    <div id="performance-diff" class="performance-diff"></div>
+    <div id="error-log" class="error-log hidden"></div>
+  </div>
+
+  <!-- WebGL2コンテキスト用キャンバス（非表示） -->
+  <canvas id="webgl-canvas" class="hidden"></canvas>
+
+  <script>
+    // --- メインロジック ---
+    const cpuStartButton = document.getElementById('cpuStartButton');
+    const gpuStartButton = document.getElementById('gpuStartButton');
+    const matrixSizeSelect = document.getElementById('matrixSize');
+    const statusDiv = document.getElementById('status');
+    const cpuTimeDiv = document.getElementById('cpuTime');
+    const gpuTimeDiv = document.getElementById('gpuTime');
+    const perfDiffDiv = document.getElementById('performance-diff');
+    const errorLogDiv = document.getElementById('error-log');
+
+    const cpuCanvas = document.getElementById('cpu-canvas');
+    const gpuCanvas = document.getElementById('gpu-canvas');
+    const cpuCtx = cpuCanvas.getContext('2d');
+    const gpuCtx = gpuCanvas.getContext('2d');
+    const glCanvas = document.getElementById('webgl-canvas');
+
+    // 共有データ
+    let matrixA = null, matrixB = null;
+    let currentMatrixSize = 0;
+    let cpuTime = -1, gpuTime = -1;
+    let cpuResultData = null, gpuResultData = null;
+
+    cpuStartButton.addEventListener('click', runCPUCalculation);
+    gpuStartButton.addEventListener('click', runGPUCalculation);
+
+    function setButtonsState(disabled, message = '') {
+      cpuStartButton.disabled = disabled;
+      gpuStartButton.disabled = disabled;
+      if (disabled) {
+        statusDiv.innerHTML = `<div class="flex-center">${message} <div class="loader"></div></div>`;
+      } else {
+        statusDiv.textContent = message;
+      }
+    }
+
+    function resetForNewSize() {
+      perfDiffDiv.innerHTML = '';
+      errorLogDiv.textContent = '';
+      errorLogDiv.classList.add('hidden');
+      cpuTimeDiv.textContent = '- ms';
+      gpuTimeDiv.textContent = '- ms';
+      cpuTime = -1; gpuTime = -1;
+      cpuResultData = null; gpuResultData = null;
+
+      const size = parseInt(matrixSizeSelect.value);
+      [cpuCanvas, gpuCanvas].forEach(c => {
+        c.width = size;
+        c.height = size;
+      });
+      cpuCtx.clearRect(0, 0, size, size);
+      gpuCtx.clearRect(0, 0, size, size);
+    }
+
+    async function prepareMatrices() {
+      const size = parseInt(matrixSizeSelect.value);
+      if (currentMatrixSize !== size || !matrixA) {
+        resetForNewSize();
+        updateStatus('1/2: 行列生成中...');
+        await wait(10);
+        const matrices = generateMatrices(size);
+        matrixA = matrices.matrixA;
+        matrixB = matrices.matrixB;
+        currentMatrixSize = size;
+      }
+    }
+
+    async function runCPUCalculation() {
+      setButtonsState(true, 'CPU計算中...');
+      errorLogDiv.textContent = '';
+      errorLogDiv.classList.add('hidden');
+      await prepareMatrices();
+
+      updateStatus('2/2: CPU計算および可視化中...');
+      await wait(10);
+
+      const result = await runCPU(matrixA, matrixB, currentMatrixSize);
+      cpuTime = result.time;
+      cpuResultData = result.result;
+      cpuTimeDiv.textContent = `${cpuTime.toFixed(2)} ms`;
+
+      updatePerformanceDiff();
+      if (gpuResultData) verifyResults(cpuResultData, gpuResultData, currentMatrixSize);
+
+      setButtonsState(false, '✅ CPU計算完了！');
+    }
+
+    async function runGPUCalculation() {
+      setButtonsState(true, 'GPU計算中...');
+      errorLogDiv.textContent = '';
+      errorLogDiv.classList.add('hidden');
+      await prepareMatrices();
+
+      updateStatus('2/2: GPU計算および可視化中...');
+      await wait(10);
+
+      try {
+        const result = runGPU(matrixA, matrixB, currentMatrixSize);
+        gpuTime = result.time;
+        gpuResultData = result.result;
+        gpuTimeDiv.textContent = `${gpuTime.toFixed(2)} ms`;
+
+        updatePerformanceDiff();
+        if (cpuResultData) verifyResults(cpuResultData, gpuResultData, currentMatrixSize);
+        setButtonsState(false, '✅ GPU計算完了！');
+      } catch (e) {
+        errorLogDiv.textContent = `エラーが発生しました: ${e.message}`;
+        errorLogDiv.classList.remove('hidden');
+        setButtonsState(false, '❌ エラー発生');
+        console.error(e);
+      }
+    }
+
+
+    function updatePerformanceDiff() {
+      if (cpuTime > 0 && gpuTime > 0) {
+        const difference = (cpuTime / gpuTime).toFixed(2);
+        perfDiffDiv.innerHTML = `🚀 GPUは <span class="performance-highlight">${difference}</span>倍高速です！`;
+      }
+    }
+
+
+    function updateStatus(message) {
+      statusDiv.textContent = message;
+    }
+
+    function wait(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // --- 行列生成関数 ---
+    function generateMatrices(size) {
+      const matrixA = new Float32Array(size * size);
+      const matrixB = new Float32Array(size * size);
+      for (let i = 0; i < size * size; i++) {
+        matrixA[i] = Math.random() * 2 - 1;
+        matrixB[i] = Math.random() * 2 - 1;
+      }
+      return { matrixA, matrixB };
+    }
+
+    // --- 結果値 -> 色変換関数 ---
+    function valueToColor(value) {
+      const normalized = (Math.tanh(value / 20) + 1) / 2;
+      let r, g, b;
+      if (normalized < 0.5) {
+        const c = normalized * 2;
+        r = c * 255; g = c * 255; b = 255;
+      } else {
+        const c = (normalized - 0.5) * 2;
+        r = 255; g = (1 - c) * 255; b = (1 - c) * 255;
+      }
+      return [r, g, b];
+    }
+
+    // --- CPU計算関数（可視化追加） ---
+    async function runCPU(matrixA, matrixB, size) {
+      const startTime = performance.now();
+      const result = new Float32Array(size * size);
+      const imageData = cpuCtx.createImageData(size, size);
+
+      for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+          let sum = 0;
+          for (let k = 0; k < size; k++) {
+            sum += matrixA[i * size + k] * matrixB[k * size + j];
+          }
+          result[i * size + j] = sum;
+          const color = valueToColor(sum);
+          const pixelIndex = (i * size + j) * 4;
+          imageData.data[pixelIndex] = color[0];
+          imageData.data[pixelIndex + 1] = color[1];
+          imageData.data[pixelIndex + 2] = color[2];
+          imageData.data[pixelIndex + 3] = 255;
+        }
+
+        if (i % 8 === 0) {
+          cpuCtx.putImageData(imageData, 0, 0);
+          await wait(0);
+        }
+      }
+
+      cpuCtx.putImageData(imageData, 0, 0);
+      const endTime = performance.now();
+      return { result, time: endTime - startTime };
+    }
+
+    // --- GPU計算関数（可視化追加） ---
+    function runGPU(matrixA, matrixB, size) {
+      const startTime = performance.now();
+
+      const gl = glCanvas.getContext('webgl2');
+      if (!gl) throw new Error('WebGL2をサポートしていないブラウザです。');
+      if (!gl.getExtension('EXT_color_buffer_float')) throw new Error('浮動小数点フレームバッファをサポートしていません。');
+
+      const vsSource = `#version 300 es
+        in vec2 a_position;
+        void main() {
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }
+    `;
+
+      const fsSource = `#version 300 es
+        precision highp float;
+        uniform sampler2D u_matrixA;
+        uniform sampler2D u_matrixB;
+        uniform int u_matrixDim;
+        out vec4 outColor;
+
+        void main() {
+            ivec2 fragCoord = ivec2(gl_FragCoord.xy);
+            int row = fragCoord.y;
+            int col = fragCoord.x;
+
+            float sum = 0.0;
+            for (int i = 0; i < u_matrixDim; i++) {
+                float a = texelFetch(u_matrixA, ivec2(i, row), 0).r;
+                float b = texelFetch(u_matrixB, ivec2(col, i), 0).r;
+                sum += a * b;
+            }
+            outColor = vec4(sum, 0.0, 0.0, 1.0);
+        }`;
+
+      const program = createProgram(gl, vsSource, fsSource);
+      const positionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const texA = createDataTexture(gl, matrixA, size);
+      const texB = createDataTexture(gl, matrixB, size);
+      const texResult = createDataTexture(gl, null, size);
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texResult, 0);
+      glCanvas.width = size;
+      glCanvas.height = size;
+      gl.viewport(0, 0, size, size);
+      gl.useProgram(program);
+      const posAttrLoc = gl.getAttribLocation(program, 'a_position');
+      gl.enableVertexAttribArray(posAttrLoc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(posAttrLoc, 2, gl.FLOAT, false, 0, 0);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texA);
+      gl.uniform1i(gl.getUniformLocation(program, 'u_matrixA'), 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texB);
+      gl.uniform1i(gl.getUniformLocation(program, 'u_matrixB'), 1);
+      gl.uniform1i(gl.getUniformLocation(program, 'u_matrixDim'), size);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      const resultDataRGBA = new Float32Array(size * size * 4);
+      gl.readPixels(0, 0, size, size, gl.RGBA, gl.FLOAT, resultDataRGBA);
+      const result = new Float32Array(size * size);
+      const imageData = gpuCtx.createImageData(size, size);
+      for (let i = 0; i < size * size; i++) {
+        const value = resultDataRGBA[i * 4];
+        result[i] = value;
+        const color = valueToColor(value);
+        imageData.data[i * 4] = color[0];
+        imageData.data[i * 4 + 1] = color[1];
+        imageData.data[i * 4 + 2] = color[2];
+        imageData.data[i * 4 + 3] = 255;
+      }
+      gpuCtx.putImageData(imageData, 0, 0);
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(texA);
+      gl.deleteTexture(texB);
+      gl.deleteTexture(texResult);
+      gl.deleteBuffer(positionBuffer);
+      gl.deleteProgram(program);
+      const endTime = performance.now();
+      return { result, time: endTime - startTime };
+    }
+
+    // --- WebGLヘルパー関数 ---
+    function createProgram(gl, vsSource, fsSource) {
+      const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+      const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+      const shaderProgram = gl.createProgram();
+      gl.attachShader(shaderProgram, vertexShader);
+      gl.attachShader(shaderProgram, fragmentShader);
+      gl.linkProgram(shaderProgram);
+      if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+        throw new Error(`シェーダープログラムのリンクに失敗しました: ${gl.getProgramInfoLog(shaderProgram)}`);
+      }
+      gl.deleteShader(vertexShader);
+      gl.deleteShader(fragmentShader);
+      return shaderProgram;
+    }
+    function loadShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        const error = `シェーダーのコンパイルに失敗しました: ${gl.getShaderInfoLog(shader)}`;
+        gl.deleteShader(shader);
+        throw new Error(error);
+      }
+      return shader;
+    }
+    function createDataTexture(gl, data, size) {
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, size, size, 0, gl.RED, gl.FLOAT, data);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return texture;
+    }
+
+    // --- 結果検証関数 ---
+    function verifyResults(cpuResult, gpuResult, size) {
+      let diffCount = 0;
+      const epsilon = 1e-2;
+      for (let i = 0; i < size * size; i++) {
+        const diff = Math.abs(cpuResult[i] - gpuResult[i]);
+        if (diff > epsilon) {
+          diffCount++;
+          if (diffCount < 5) console.warn(`結果不一致 at index ${i}: CPU=${cpuResult[i]}, GPU=${gpuResult[i]}, 差=${diff}`);
+        }
+      }
+      if (diffCount > 0) {
+        errorLogDiv.textContent += `\n警告: CPUとGPUの結果が${diffCount}個の項目で異なります。（浮動小数点精度の違いの可能性があります）`;
+        errorLogDiv.classList.remove('hidden');
+      } else {
+        console.log('結果検証成功: CPUとGPUの計算結果が一致しています。');
+      }
+    }
+  </script>
+</body>
+
+</html>
